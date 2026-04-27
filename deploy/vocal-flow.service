@@ -1,0 +1,20 @@
+[Unit]
+Description=vocalFlow API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/vocal-flow/backend
+Environment="DB_PATH=/opt/vocal-flow/data/vocal_flow.db"
+Environment="UPLOADS_DIR=/opt/vocal-flow/data/uploads"
+Environment="CORS_ORIGINS=https://vocalflow.eurekai.io,http://localhost:5173"
+EnvironmentFile=/opt/vocal-flow/.env
+ExecStart=/opt/vocal-flow/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8765 --workers 1
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
