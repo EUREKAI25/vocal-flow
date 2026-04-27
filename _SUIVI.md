@@ -3,7 +3,7 @@
 ## Objectif
 Web app vocal training mobile-first : scat, langue (italien), enregistrement, analyse pitch, relief vocal.
 
-## Statut : 🟢 en cours de build
+## Statut : 🟢 MVP déployé — https://vocal.eurkai.com
 
 ## Stack
 - Frontend : React + Vite (mobile-first, dark theme)
@@ -29,4 +29,13 @@ Web app vocal training mobile-first : scat, langue (italien), enregistrement, an
 - [x] Brief extrait de conversation ChatGPT (scat_langues.json)
 - [x] Architecture définie : React + FastAPI + SQLite + VPS
 - [x] Auth simple (JWT) prévue dès MVP
-- [~] Build en cours
+- [x] Build complet — 36 fichiers, React + FastAPI + SQLite
+- [x] GitHub : https://github.com/EUREKAI25/vocal-flow
+- [x] VPS : /opt/vocal-flow — service vocal-flow.service actif
+- [x] DNS : vocal.eurkai.com → 212.227.80.241
+- [x] SSL : Let's Encrypt (expire 2026-07-26)
+- [x] DB init + user nathalie créé (pwd: vocalFlow2026!)
+- [x] Tests login + health HTTPS ✓
+
+**URL prod : https://vocal.eurkai.com**
+**Credentials : nathalie / vocalFlow2026!**
