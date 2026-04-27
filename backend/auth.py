@@ -1,28 +1,36 @@
+import hashlib
 import os
+import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from database import get_conn
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "changeme-set-in-env")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_DAYS = 30
+PBKDF2_ITERATIONS = 260_000
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer = HTTPBearer(auto_error=False)
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    salt = secrets.token_hex(32)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), PBKDF2_ITERATIONS)
+    return f"pbkdf2${salt}${key.hex()}"
 
 
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+def verify_password(plain: str, stored: str) -> bool:
+    try:
+        _, salt, key_hex = stored.split("$")
+        key = hashlib.pbkdf2_hmac("sha256", plain.encode(), salt.encode(), PBKDF2_ITERATIONS)
+        return secrets.compare_digest(key, bytes.fromhex(key_hex))
+    except Exception:
+        return False
 
 
 def create_token(user_id: int) -> str:
