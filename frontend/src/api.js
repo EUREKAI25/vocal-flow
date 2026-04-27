@@ -15,9 +15,13 @@ async function request(path, options = {}) {
     headers: { ...authHeaders(), ...options.headers },
   })
   if (res.status === 401) {
-    localStorage.removeItem('vf_token')
-    window.location.href = '/login'
-    return
+    if (!window.location.pathname.includes('/login')) {
+      localStorage.removeItem('vf_token')
+      window.location.href = '/login'
+      return
+    }
+    const err = await res.json().catch(() => ({ detail: 'Identifiants incorrects' }))
+    throw new Error(err.detail || 'Identifiants incorrects')
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
