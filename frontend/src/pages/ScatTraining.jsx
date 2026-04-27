@@ -5,11 +5,26 @@ import LoopPlayer from '../components/LoopPlayer'
 import PitchVisualizer from '../components/PitchVisualizer'
 import VocalReliefGauge from '../components/VocalReliefGauge'
 import SimilarityGauge from '../components/SimilarityGauge'
-import { computeSimilarity } from '../utils/audioAnalysis'
+import { detectPitch, computeSimilarity } from '../utils/audioAnalysis'
 import { computeVocalRelief, generateComment } from '../utils/vocalRelief'
 import { api } from '../api'
 
 const SEGMENT_DURATIONS = [10, 15, 20, 30]
+
+async function extractPitchesFromBlob(blob) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext
+  const ctx = new AudioCtx()
+  const arrayBuf = await blob.arrayBuffer()
+  const audioBuf = await ctx.decodeAudioData(arrayBuf)
+  ctx.close()
+  const data = audioBuf.getChannelData(0)
+  const CHUNK = 2048
+  const pitches = []
+  for (let i = 0; i + CHUNK < data.length; i += CHUNK) {
+    pitches.push(detectPitch(data.subarray(i, i + CHUNK), audioBuf.sampleRate))
+  }
+  return pitches
+}
 
 export default function ScatTraining() {
   const navigate = useNavigate()
@@ -17,6 +32,7 @@ export default function ScatTraining() {
   const [fileUrl, setFileUrl] = useState(null)
   const [segments, setSegments] = useState([])
   const [activeSegment, setActiveSegment] = useState(null)
+  const [refPitches, setRefPitches] = useState([])
   const [segDuration, setSegDuration] = useState(15)
   const [userPitches, setUserPitches] = useState([])
   const [scores, setScores] = useState(null)
@@ -32,7 +48,19 @@ export default function ScatTraining() {
     setFileUrl(url)
     setSegments([])
     setActiveSegment(null)
+    setRefPitches([])
     setScores(null)
+  }
+
+  async function selectSegment(seg) {
+    setActiveSegment(seg)
+    setScores(null)
+    setSaved(false)
+    setUserPitches([])
+    setRefPitches([])
+    // Extraire les pitches du segment de référence
+    const pitches = await extractPitchesFromBlob(seg.blob)
+    setRefPitches(pitches.filter(p => p > 0))
   }
 
   async function cutSegments() {
@@ -75,10 +103,11 @@ export default function ScatTraining() {
     const valid = pitches.filter((p) => p > 0)
     setUserPitches(valid)
     const relief = computeVocalRelief(pitches)
+    const similarity = computeSimilarity(refPitches, valid)
     const s = {
       score_relief: relief.score,
       relief_label: relief.label,
-      score_similarity: activeSegment ? Math.round(30 + Math.random() * 50) : 0,
+      score_similarity: similarity,
       score_rhythm: Math.round(40 + Math.random() * 40),
       score_intonation: Math.round(40 + Math.random() * 40),
       score_intensity: Math.round(40 + Math.random() * 40),
@@ -167,7 +196,7 @@ export default function ScatTraining() {
             {segments.map((seg) => (
               <button
                 key={seg.id}
-                onClick={() => { setActiveSegment(seg); setScores(null); setSaved(false) }}
+                onClick={() => selectSegment(seg)}
                 className="btn"
                 style={{
                   justifyContent: 'flex-start',
@@ -193,6 +222,16 @@ export default function ScatTraining() {
             <LoopPlayer src={activeSegment.url} label={activeSegment.label} />
           </div>
 
+          {/* Courbe de référence */}
+          {refPitches.length > 0 && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 8 }}>
+                Courbe du segment — imprègne-toi de ce relief avant d'enregistrer
+              </div>
+              <PitchVisualizer refPitches={refPitches} height={80} />
+            </div>
+          )}
+
           <div className="card" style={{ marginBottom: 16 }}>
             <h3 style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 12 }}>④ Enregistrer ma version</h3>
             <AudioRecorder onPitchData={handleUserPitchData} />
@@ -200,10 +239,11 @@ export default function ScatTraining() {
         </>
       )}
 
-      {/* Scores */}
+      {/* Scores + comparaison */}
       {scores && (
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <PitchVisualizer userPitches={userPitches} />
+          <div style={{ fontSize: 13, color: 'var(--text2)' }}>Comparaison</div>
+          <PitchVisualizer refPitches={refPitches} userPitches={userPitches} height={120} />
           <VocalReliefGauge label={scores.relief_label} score={scores.score_relief} />
           <SimilarityGauge score={scores.score_similarity} />
           <div style={{

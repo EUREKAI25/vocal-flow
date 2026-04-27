@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { detectPitch } from '../utils/audioAnalysis'
 
 const MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
+const PITCH_CHUNK = 2048
 
 function getSupportedMime() {
   return MIME_TYPES.find((m) => MediaRecorder.isTypeSupported(m)) || ''
@@ -9,7 +11,7 @@ function getSupportedMime() {
 /**
  * props:
  *   onRecorded(blob, url) — appelé quand l'enregistrement est terminé
- *   onPitchData(pitches)  — tableau de pitch capturé pendant l'enregistrement
+ *   onPitchData(pitches)  — tableau de Hz capturé en temps réel pendant l'enregistrement
  *   maxSeconds            — durée max (défaut 120s)
  */
 export default function AudioRecorder({ onRecorded, onPitchData, maxSeconds = 120 }) {
@@ -17,15 +19,15 @@ export default function AudioRecorder({ onRecorded, onPitchData, maxSeconds = 12
   const [duration, setDuration] = useState(0)
   const [audioUrl, setAudioUrl] = useState(null)
 
-  const mediaRef = useRef(null)
-  const chunksRef = useRef([])
-  const timerRef = useRef(null)
-  const pitchesRef = useRef([])
-  const ctxRef = useRef(null)
+  const mediaRef    = useRef(null)
+  const chunksRef   = useRef([])
+  const timerRef    = useRef(null)
+  const pitchesRef  = useRef([])
+  const ctxRef      = useRef(null)
   const processorRef = useRef(null)
-  const streamRef = useRef(null)
-  const canvasRef = useRef(null)
-  const animRef = useRef(null)
+  const streamRef   = useRef(null)
+  const canvasRef   = useRef(null)
+  const animRef     = useRef(null)
   const analyserRef = useRef(null)
 
   function drawWaveform() {
@@ -55,22 +57,33 @@ export default function AudioRecorder({ onRecorded, onPitchData, maxSeconds = 12
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
 
-      // Waveform via AnalyserNode
       const AudioCtx = window.AudioContext || window.webkitAudioContext
       const ctx = new AudioCtx()
       ctxRef.current = ctx
       const source = ctx.createMediaStreamSource(stream)
+
+      // Waveform
       const analyser = ctx.createAnalyser()
       analyser.fftSize = 1024
       analyserRef.current = analyser
       source.connect(analyser)
+
+      // Pitch capture via ScriptProcessor
+      const processor = ctx.createScriptProcessor(PITCH_CHUNK, 1, 1)
+      processorRef.current = processor
+      pitchesRef.current = []
+      processor.onaudioprocess = (e) => {
+        const buf = e.inputBuffer.getChannelData(0)
+        pitchesRef.current.push(detectPitch(buf, ctx.sampleRate))
+      }
+      source.connect(processor)
+      processor.connect(ctx.destination)
 
       // MediaRecorder
       const mime = getSupportedMime()
       const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {})
       mediaRef.current = recorder
       chunksRef.current = []
-      pitchesRef.current = []
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data)
@@ -90,10 +103,7 @@ export default function AudioRecorder({ onRecorded, onPitchData, maxSeconds = 12
 
       timerRef.current = setInterval(() => {
         setDuration((d) => {
-          if (d + 1 >= maxSeconds) {
-            stopRecording()
-            return d + 1
-          }
+          if (d + 1 >= maxSeconds) { stopRecording(); return d + 1 }
           return d + 1
         })
       }, 1000)
@@ -108,6 +118,7 @@ export default function AudioRecorder({ onRecorded, onPitchData, maxSeconds = 12
     clearInterval(timerRef.current)
     cancelAnimationFrame(animRef.current)
     if (mediaRef.current?.state === 'recording') mediaRef.current.stop()
+    processorRef.current?.disconnect()
     streamRef.current?.getTracks().forEach((t) => t.stop())
     if (ctxRef.current?.state !== 'closed') ctxRef.current?.close().catch(() => {})
   }
