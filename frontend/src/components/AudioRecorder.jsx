@@ -107,9 +107,9 @@ export default function AudioRecorder({ onRecorded, onPitchData, maxSeconds = 12
   function stopRecording() {
     clearInterval(timerRef.current)
     cancelAnimationFrame(animRef.current)
-    mediaRef.current?.stop()
+    if (mediaRef.current?.state === 'recording') mediaRef.current.stop()
     streamRef.current?.getTracks().forEach((t) => t.stop())
-    ctxRef.current?.close()
+    if (ctxRef.current?.state !== 'closed') ctxRef.current?.close().catch(() => {})
   }
 
   function reset() {
